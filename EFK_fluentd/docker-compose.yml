@@ -1,0 +1,77 @@
+version: "3.7"
+services:
+  flog:
+      image: mingrammer/flog
+      container_name: flog
+      command: "-f json -l -d 1"
+      depends_on: 
+        - fluentd
+      links:
+        - fluentd
+      logging:
+        driver: "fluentd"
+        options:
+          fluentd-address: localhost:24224
+          tag: fake.log
+      networks:
+        - elk-nginx
+
+  fluentd:
+      image: fluentd:${FLUENTD_VERSION}
+      container_name: fluentd_${FLUENTD_VERSION}
+      build:
+        context: ./fluentd
+        args:
+          FLUENTD_VERSION: $FLUENTD_VERSION
+      ports:
+        - "24224:24224"
+        - "24224:24224/udp"
+      depends_on: 
+        - "elasticsearch"
+      networks:
+        - elk-nginx
+      volumes:
+        - ./fluentd/etc:/fluentd/etc
+
+  elasticsearch:
+    image: elasticsearch:${ELK_VERSION}
+    container_name: elasticsearch_${ELK_VERSION}
+    build:
+      context: ./elasticsearch
+      args:
+        ELK_VERSION: $ELK_VERSION
+    mem_limit: 1G
+    ports:
+      - "9200:9200"
+    expose:
+      - 9200
+    volumes:
+      - ./elasticsearch/data:/usr/share/elasticsearch/data
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=true
+    networks:
+      - elk-nginx
+
+  kibana:
+    image: kibana:${ELK_VERSION}
+    container_name: kibana_${ELK_VERSION}
+    build:
+      context: kibana/
+      args:
+        ELK_VERSION: $ELK_VERSION
+    mem_limit: 1G
+    volumes:
+      - ./kibana/kibana.yml:/usr/share/kibana/config/kibana.yml
+      - ./kibana/data:/usr/share/kibana/data
+    links:
+      - "elasticsearch"
+    ports:
+      - "5601:5601"
+    networks:
+      - elk-nginx
+
+networks:
+  elk-nginx:
+    driver: bridge
